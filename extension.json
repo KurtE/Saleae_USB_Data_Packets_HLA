@@ -1,0 +1,13 @@
+{
+  "name": "USB Data Packets HLA",
+  "apiVersion": "1.0.0",
+  "author": "KurtE",
+  "version": "0.0.1",
+  "description": "Use modified USB Analyzer to Show packets which have data associated with them",
+  "extensions": {
+    "USB Data Packets HLA": {
+      "type": "HighLevelAnalyzer",
+      "entryPoint": "HighLevelAnalyzer.Hla"
+    }
+  }
+}
