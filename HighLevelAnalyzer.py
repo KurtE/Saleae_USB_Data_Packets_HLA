@@ -41,7 +41,7 @@ class Hla(HighLevelAnalyzer):
         self.frame_end_time = None
         self.data_packet_save = None
         self.frame_data = {'pid':'', 'pid2':''}
-
+        self.first_packet_start_time = None;
         #print("Settings:", self.my_string_setting,
         #      self.my_number_setting, self.my_choices_setting)
 
@@ -49,6 +49,8 @@ class Hla(HighLevelAnalyzer):
         #if frame.type == 'frame':
         #    self.frame_start_time = frame.start_time
         #    self.frame_data = {'pid':'', 'pid2':''}
+        if self.first_packet_start_time == None:
+            self.first_packet_start_time = frame.start_time
         if frame.type == 'pid':
             if self.frame_data != None:
                 pid_type = frame.data['pid']
@@ -70,7 +72,7 @@ class Hla(HighLevelAnalyzer):
         elif frame.type ==  'addrendp':
             self.addr = frame.data['addr']
             self.endpoint = frame.data['endpoint']
-        elif frame.type == 'result':
+        elif frame.type == 'data':
             if self.data_packet_save == None:
                 self.data_packet_save = bytearray()
             self.data_packet_save.extend(frame.data['data'])    
@@ -89,10 +91,11 @@ class Hla(HighLevelAnalyzer):
                 self.frame_data['endpoint'] = self.endpoint
                 self.frame_data['addr'] = self.addr
                 self.data_packet_save = None
+                start_bias_time = float(self.frame_start_time - self.first_packet_start_time)
                 if self.base == 10:
-                    print(self.frame_data['pid'], ',', self.frame_data['pid2'], ',', str(self.endpoint[0]), ',', str(self.addr[0]), ',', data_str)
+                    print(str(start_bias_time), ',', self.frame_data['pid'], ',', str(self.endpoint[0]), ',', str(self.addr[0]), ',', data_str)
                 else:
-                    print(self.frame_data['pid'], ',', self.frame_data['pid2'], ',', hex(self.endpoint[0]), ',', hex(self.addr[0]), ',', data_str)
+                    print(str(start_bias_time), ',', self.frame_data['pid'], ',', hex(self.endpoint[0]), ',', hex(self.addr[0]), ',', data_str)
                 new_frame = AnalyzerFrame("usb", self.frame_start_time, self.frame_end_time, self.frame_data)
                 self.frame_data = {'pid':'', 'pid2':''}
                 return new_frame
