@@ -80,8 +80,58 @@ class Hla(HighLevelAnalyzer):
 
         elif frame.type == 'eop':
             if (self.data_packet_save) != None:
-                #print("PID", self.pid_type, "length: ", len(self.pid_type), "Hex:", hex(self.pid_type[0]))
                 data_str = ''
+                setup_str = ''
+                #print("PID", self.pid_type, "length: ", len(self.pid_type), "Hex:", hex(self.pid_type[0]))
+                if self.frame_data['pid'] == "SETUP":
+                    bmRequestType = self.data_packet_save[0]
+                    bmRequest = self.data_packet_save[1]
+                    wValue = self.data_packet_save[2] + (self.data_packet_save[3] << 8)
+                    wIndex = self.data_packet_save[4] + (self.data_packet_save[5] << 8)
+                    wLength = self.data_packet_save[6] + (self.data_packet_save[7] << 8)
+                    # first pass brute force
+                    if bmRequestType == 0x0:
+                        if bmRequest == 0x05:
+                            setup_str = "<SET_ADDRESS"
+                        elif bmRequest == 0x09:     
+                            setup_str = "<SET_CONFIGURATION"
+                    elif bmRequestType == 0x21:
+                        if bmRequest == 0x0A:
+                            setup_str = "<HID SET_IDLE"
+                        elif bmRequest == 0x09:     
+                            setup_str = "<HID SET_REPORT"
+                    elif bmRequestType == 0x80:
+                        if bmRequest == 0x06:     
+                            setup_str = "<GET_DESCRIPTOR -"
+                            # work off of high byte of wvalue
+                            if self.data_packet_save[3] == 0x01:
+                                setup_str += " DEVICE #:" + str(self.data_packet_save[2]) 
+                            elif self.data_packet_save[3] == 0x02:
+                                setup_str += " CONFIG #:" + str(self.data_packet_save[2])
+                            elif self.data_packet_save[3] == 0x03:
+                                setup_str += " STRING #:" + str(self.data_packet_save[2])
+                            elif self.data_packet_save[3] == 0x06:
+                                setup_str += " DEVICE_QUALIFIER #:" + str(self.data_packet_save[2])
+                            else:
+                                setup_str += '<?? '
+                    elif bmRequestType == 0x81:
+                        if bmRequest == 0x06:     
+                            setup_str = "<GET_DESCRIPTOR - HID REPORT"
+                    elif bmRequestType == 0xA1:
+                        if bmRequest == 0x01:     
+                            setup_str = "<GET_REPORT -"
+                            # work off of high byte of wvalue
+                            if self.data_packet_save[3] == 0x03:
+                                setup_str += " FEATURE # " + str(self.data_packet_save[2]) 
+                            else:
+                                setup_str += '?? '
+                    else:
+                        setup_str = "<RT:" + hex(bmRequestType) + " R:" + hex(bmRequest) 
+
+                    setup_str +=' I:' + hex(wIndex) + " L:" + hex(wLength)  + ">"
+
+                    self.frame_data['setup'] = setup_str
+
                 for i in range(len(self.data_packet_save)):
                     if self.base == 10:
                         data_str +=' ' + str(self.data_packet_save[i])
@@ -93,9 +143,9 @@ class Hla(HighLevelAnalyzer):
                 self.data_packet_save = None
                 start_bias_time = float(self.frame_start_time - self.first_packet_start_time)
                 if self.base == 10:
-                    print(str(start_bias_time), ',', self.frame_data['pid'], ',', str(self.endpoint[0]), ',', str(self.addr[0]), ',', data_str)
+                    print(str(start_bias_time), ',', self.frame_data['pid'], ',', str(self.endpoint[0]), ',', str(self.addr[0]), ',', setup_str, ",",data_str)
                 else:
-                    print(str(start_bias_time), ',', self.frame_data['pid'], ',', hex(self.endpoint[0]), ',', hex(self.addr[0]), ',', data_str)
+                    print(str(start_bias_time), ',', self.frame_data['pid'], ',', hex(self.endpoint[0]), ',', hex(self.addr[0]), ',', setup_str, ",",data_str)
                 new_frame = AnalyzerFrame("usb", self.frame_start_time, self.frame_end_time, self.frame_data)
                 self.frame_data = {'pid':'', 'pid2':''}
                 return new_frame
