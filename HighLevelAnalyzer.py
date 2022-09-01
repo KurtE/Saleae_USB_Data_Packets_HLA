@@ -21,7 +21,8 @@ class Hla(HighLevelAnalyzer):
     result_types = {
         'usb': {
             #'format': '{{data.data}}'
-            'format': '{{data.pid}},{{data.pid2}}({{data.addr}},{{data.endpoint}}) {{data.data}}'
+            #'format': '{{data.pid}},{{data.pid2}}({{data.addr}},{{data.endpoint}}) {{data.data}}'
+            'format': '{{data.pid}}({{data.addr}},{{data.endpoint}}) {{data.data}}'
         }
     }
 
@@ -40,7 +41,8 @@ class Hla(HighLevelAnalyzer):
         self.frame_start_time = None
         self.frame_end_time = None
         self.data_packet_save = None
-        self.frame_data = {'pid':'', 'pid2':''}
+        #self.frame_data = {'pid':'', 'pid2':''}
+        self.frame_data = {'pid':''}
         self.first_packet_start_time = None;
         #print("Settings:", self.my_string_setting,
         #      self.my_number_setting, self.my_choices_setting)
@@ -53,29 +55,47 @@ class Hla(HighLevelAnalyzer):
             self.first_packet_start_time = frame.start_time
         if frame.type == 'pid':
             if self.frame_data != None:
-                pid_type = frame.data['pid']
-                if pid_type[0] == 0x69:
+                pid_type = frame.data['value']
+                if pid_type == "IN":
                     self.frame_data['pid'] = "IN" 
                     self.frame_start_time = frame.start_time
-                elif pid_type[0] == 0xE1:
+                elif pid_type == "OUT":
                     self.frame_data['pid'] = "OUT" 
                     self.frame_start_time = frame.start_time
-                elif pid_type[0] == 0x2D:
+                elif pid_type == "SETUP":
                     self.frame_data['pid'] = "SETUP" 
                     self.frame_start_time = frame.start_time
-                elif pid_type[0] == 0xC3:
-                    self.frame_data['pid2'] = "DATA0" 
-                elif pid_type[0] == 0x4B:
-                    self.frame_data['pid2'] = "DATA1" 
+                #elif pid_type == "DATA0":
+                #    self.frame_data['pid2'] = "DATA0" 
+                #elif pid_type == "DATA1":
+                #    self.frame_data['pid2'] = "DATA1" 
                 #else:    
                 #    self.frame_data['pid'] = ''.join([ '0x', hex(pid_type[0]).upper()[2:] ]) 
         elif frame.type ==  'addrendp':
-            self.addr = frame.data['addr']
-            self.endpoint = frame.data['endpoint']
+            self.addr = frame.data['value']
+            self.endpoint = frame.data['value2']
         elif frame.type == 'data':
             if self.data_packet_save == None:
                 self.data_packet_save = bytearray()
             self.data_packet_save.extend(frame.data['data'])    
+            self.frame_end_time = frame.end_time
+        
+        elif frame.type == 'protocol':
+            self.data_packet_save = bytearray(8)
+            self.data_packet_save[0] = frame.data['bmRequestType'][0]
+            self.data_packet_save[1] = frame.data['bRequest'][0]
+
+            wValue = frame.data['wValue']
+            self.data_packet_save[2] = wValue[1]
+            self.data_packet_save[3] = wValue[0]
+
+            wIndex = frame.data['wIndex']   
+            self.data_packet_save[4] = wIndex[1]
+            self.data_packet_save[5] = wIndex[0]
+
+            wLength = frame.data['wLength']   
+            self.data_packet_save[6] = wLength[1]
+            self.data_packet_save[7] = wLength[0]
             self.frame_end_time = frame.end_time
 
         elif frame.type == 'eop':
@@ -147,7 +167,8 @@ class Hla(HighLevelAnalyzer):
                 else:
                     print(str(start_bias_time), ',', self.frame_data['pid'], ',', hex(self.endpoint[0]), ',', hex(self.addr[0]), ',', setup_str, ",",data_str)
                 new_frame = AnalyzerFrame("usb", self.frame_start_time, self.frame_end_time, self.frame_data)
-                self.frame_data = {'pid':'', 'pid2':''}
+                #self.frame_data = {'pid':'', 'pid2':''}
+                self.frame_data = {'pid':''}
                 return new_frame
 
         return None
