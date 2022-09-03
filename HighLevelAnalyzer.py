@@ -102,7 +102,7 @@ class Hla(HighLevelAnalyzer):
             if not self.processing_report_data:
                 self.processing_report_data = True
                 start_bias_time = float(self.frame_start_time - self.first_packet_start_time)
-                print(str(start_bias_time), ',Result Report Start,', hex(self.endpoint[0]), ',', hex(self.addr[0]))
+                print(str(start_bias_time), ';Result Report Start;', hex(self.endpoint[0]), ';', hex(self.addr[0]))
 
             if self.data_packet_save == None:
                 self.data_packet_save = bytearray()
@@ -120,7 +120,7 @@ class Hla(HighLevelAnalyzer):
             data = frame.data['value']
             self.data_packet_save.extend(data)
             start_bias_time = float(frame.start_time - self.first_packet_start_time)
-            print(str(start_bias_time), ',Item,', hex(self.endpoint[0]), ',', hex(self.addr[0]), ',', frame.data['text'])
+            print(str(start_bias_time), ';Item;', hex(self.endpoint[0]), ';', hex(self.addr[0]), ';', frame.data['text'])
             self.frame_end_time = frame.end_time
 
         elif (frame.type == 'wchar') or (frame.type == 'wLANGID'):
@@ -143,14 +143,14 @@ class Hla(HighLevelAnalyzer):
             if not self.processing_report_data:
                 self.processing_report_data = True
                 start_bias_time = float(self.frame_start_time - self.first_packet_start_time)
-                print(str(start_bias_time), ',HID Report Start,', hex(self.endpoint[0]), ',', hex(self.addr[0]))
+                print(str(start_bias_time), ';HID Report Start;', hex(self.endpoint[0]), ';', hex(self.addr[0]))
 
             if self.data_packet_save == None:
                 self.data_packet_save = bytearray()
             data = frame.data['value']
             self.data_packet_save.extend(data)
             start_bias_time = float(frame.start_time - self.first_packet_start_time)
-            print(str(start_bias_time), ',HID Item,', hex(self.endpoint[0]), ',', hex(self.addr[0]), ',', frame.data['text'])
+            print(str(start_bias_time), ';HID Item;', hex(self.endpoint[0]), ';', hex(self.addr[0]), ';', frame.data['text'])
             self.frame_end_time = frame.end_time
         elif frame.type == 'eop':
             if (self.data_packet_save) != None:
@@ -224,9 +224,9 @@ class Hla(HighLevelAnalyzer):
                 self.data_packet_save = None
                 start_bias_time = float(self.frame_start_time - self.first_packet_start_time)
                 if self.base == 10:
-                    print(str(start_bias_time), ',', self.frame_data['pid'], ',', str(self.endpoint[0]), ',', str(self.addr[0]), ',', text_str, ",",data_str)
+                    print(str(start_bias_time), ';', self.frame_data['pid'], ';', str(self.endpoint[0]), ';', str(self.addr[0]), ';', text_str, ";",data_str)
                 else:
-                    print(str(start_bias_time), ',', self.frame_data['pid'], ',', hex(self.endpoint[0]), ',', hex(self.addr[0]), ',', text_str, ",",data_str)
+                    print(str(start_bias_time), ';', self.frame_data['pid'], ';', hex(self.endpoint[0]), ';', hex(self.addr[0]), ';', text_str, ";",data_str)
                 new_frame = AnalyzerFrame(report_type, self.frame_start_time, self.frame_end_time, self.frame_data)
                 #self.frame_data = {'pid':'', 'pid2':''}
                 self.frame_data = {'pid':''}
