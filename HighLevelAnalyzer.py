@@ -19,11 +19,9 @@ class Hla(HighLevelAnalyzer):
 
     # An optional list of types this analyzer produces, providing a way to customize the way frames are displayed in Logic 2.
     result_types = {
-        'usb': {
-            #'format': '{{data.data}}'
-            #'format': '{{data.pid}},{{data.pid2}}({{data.addr}},{{data.endpoint}}) {{data.data}}'
-            'format': '{{data.pid}}({{data.addr}},{{data.endpoint}}) {{data.data}}'
-        }
+        'USB': {'format': '{{data.pid}}({{data.addr}},{{data.endpoint}}) {{data.data}}'},
+        'USB Text': {'format': '{{data.pid}}({{data.addr}},{{data.endpoint}}) "{{data.text}}"'},
+
     }
 
     def __init__(self):
@@ -41,6 +39,8 @@ class Hla(HighLevelAnalyzer):
         self.frame_start_time = None
         self.frame_end_time = None
         self.data_packet_save = None
+        self.text_save = None
+        self.processing_report_data = False
         #self.frame_data = {'pid':'', 'pid2':''}
         self.frame_data = {'pid':''}
         self.first_packet_start_time = None;
@@ -97,11 +97,66 @@ class Hla(HighLevelAnalyzer):
             self.data_packet_save[6] = wLength[1]
             self.data_packet_save[7] = wLength[0]
             self.frame_end_time = frame.end_time
+        
+        elif frame.type == 'presult':
+            if not self.processing_report_data:
+                self.processing_report_data = True
+                start_bias_time = float(self.frame_start_time - self.first_packet_start_time)
+                print(str(start_bias_time), ',Result Report Start,', hex(self.endpoint[0]), ',', hex(self.addr[0]))
 
+            if self.data_packet_save == None:
+                self.data_packet_save = bytearray()
+            wLength = frame.data['wLength']   
+            data = frame.data['value']
+            if wLength[0] == 1:
+                self.data_packet_save.extend(data)
+            else:
+                data_rev = bytearray(2);
+                data_rev[0] = data[1]
+                data_rev[1] = data[0]
+                self.data_packet_save.extend(data_rev)
+            self.frame_end_time = frame.end_time
+
+            data = frame.data['value']
+            self.data_packet_save.extend(data)
+            start_bias_time = float(frame.start_time - self.first_packet_start_time)
+            print(str(start_bias_time), ',Item,', hex(self.endpoint[0]), ',', hex(self.addr[0]), ',', frame.data['text'])
+            self.frame_end_time = frame.end_time
+
+        elif (frame.type == 'wchar') or (frame.type == 'wLANGID'):
+            if self.data_packet_save == None:
+                self.data_packet_save = bytearray()
+            data = frame.data['data']
+            data_rev = bytearray(2);
+            data_rev[0] = data[1]
+            data_rev[1] = data[0]
+            self.data_packet_save.extend(data_rev)
+
+            text = frame.data['text']
+            if text != None:
+                if self.text_save == None:
+                    self.text_save = ''
+                self.text_save += text
+            self.frame_end_time = frame.end_time
+
+        elif frame.type == 'hiditem':
+            if not self.processing_report_data:
+                self.processing_report_data = True
+                start_bias_time = float(self.frame_start_time - self.first_packet_start_time)
+                print(str(start_bias_time), ',HID Report Start,', hex(self.endpoint[0]), ',', hex(self.addr[0]))
+
+            if self.data_packet_save == None:
+                self.data_packet_save = bytearray()
+            data = frame.data['value']
+            self.data_packet_save.extend(data)
+            start_bias_time = float(frame.start_time - self.first_packet_start_time)
+            print(str(start_bias_time), ',HID Item,', hex(self.endpoint[0]), ',', hex(self.addr[0]), ',', frame.data['text'])
+            self.frame_end_time = frame.end_time
         elif frame.type == 'eop':
             if (self.data_packet_save) != None:
                 data_str = ''
-                setup_str = ''
+                text_str = ''
+                report_type = 'USB'
                 #print("PID", self.pid_type, "length: ", len(self.pid_type), "Hex:", hex(self.pid_type[0]))
                 if self.frame_data['pid'] == "SETUP":
                     bmRequestType = self.data_packet_save[0]
@@ -112,45 +167,51 @@ class Hla(HighLevelAnalyzer):
                     # first pass brute force
                     if bmRequestType == 0x0:
                         if bmRequest == 0x05:
-                            setup_str = "<SET_ADDRESS"
+                            text_str = "SET_ADDRESS"
                         elif bmRequest == 0x09:     
-                            setup_str = "<SET_CONFIGURATION"
+                            text_str = "[SET_CONFIGURATION"
                     elif bmRequestType == 0x21:
                         if bmRequest == 0x0A:
-                            setup_str = "<HID SET_IDLE"
+                            text_str = "[HID SET_IDLE"
                         elif bmRequest == 0x09:     
-                            setup_str = "<HID SET_REPORT"
+                            text_str = "[HID SET_REPORT"
                     elif bmRequestType == 0x80:
                         if bmRequest == 0x06:     
-                            setup_str = "<GET_DESCRIPTOR -"
+                            text_str = "[GET_DESCRIPTOR -"
                             # work off of high byte of wvalue
                             if self.data_packet_save[3] == 0x01:
-                                setup_str += " DEVICE #:" + str(self.data_packet_save[2]) 
+                                text_str += " DEVICE #:" + str(self.data_packet_save[2]) 
                             elif self.data_packet_save[3] == 0x02:
-                                setup_str += " CONFIG #:" + str(self.data_packet_save[2])
+                                text_str += " CONFIG #:" + str(self.data_packet_save[2])
                             elif self.data_packet_save[3] == 0x03:
-                                setup_str += " STRING #:" + str(self.data_packet_save[2])
+                                text_str += " STRING #:" + str(self.data_packet_save[2])
                             elif self.data_packet_save[3] == 0x06:
-                                setup_str += " DEVICE_QUALIFIER #:" + str(self.data_packet_save[2])
+                                text_str += " DEVICE_QUALIFIER #:" + str(self.data_packet_save[2])
                             else:
-                                setup_str += '<?? '
+                                text_str += '<?? '
                     elif bmRequestType == 0x81:
                         if bmRequest == 0x06:     
-                            setup_str = "<GET_DESCRIPTOR - HID REPORT"
+                            text_str = "[GET_DESCRIPTOR - HID REPORT"
                     elif bmRequestType == 0xA1:
                         if bmRequest == 0x01:     
-                            setup_str = "<GET_REPORT -"
+                            text_str = "[GET_REPORT -"
                             # work off of high byte of wvalue
                             if self.data_packet_save[3] == 0x03:
-                                setup_str += " FEATURE # " + str(self.data_packet_save[2]) 
+                                text_str += " FEATURE # " + str(self.data_packet_save[2]) 
                             else:
-                                setup_str += '?? '
+                                text_str += '?? '
                     else:
-                        setup_str = "<RT:" + hex(bmRequestType) + " R:" + hex(bmRequest) 
+                        text_str = "[RT:" + hex(bmRequestType) + " R:" + hex(bmRequest) 
 
-                    setup_str +=' I:' + hex(wIndex) + " L:" + hex(wLength)  + ">"
+                    text_str +=' I:' + hex(wIndex) + " L:" + hex(wLength)  + "]"
 
-                    self.frame_data['setup'] = setup_str
+                    self.frame_data['text'] = text_str
+                    report_type = 'USB Text'
+                elif self.text_save:
+                    text_str = self.text_save
+                    self.frame_data['text'] = text_str
+                    self.text_save = None
+                    report_type = 'USB Text'
 
                 for i in range(len(self.data_packet_save)):
                     if self.base == 10:
@@ -163,12 +224,13 @@ class Hla(HighLevelAnalyzer):
                 self.data_packet_save = None
                 start_bias_time = float(self.frame_start_time - self.first_packet_start_time)
                 if self.base == 10:
-                    print(str(start_bias_time), ',', self.frame_data['pid'], ',', str(self.endpoint[0]), ',', str(self.addr[0]), ',', setup_str, ",",data_str)
+                    print(str(start_bias_time), ',', self.frame_data['pid'], ',', str(self.endpoint[0]), ',', str(self.addr[0]), ',', text_str, ",",data_str)
                 else:
-                    print(str(start_bias_time), ',', self.frame_data['pid'], ',', hex(self.endpoint[0]), ',', hex(self.addr[0]), ',', setup_str, ",",data_str)
-                new_frame = AnalyzerFrame("usb", self.frame_start_time, self.frame_end_time, self.frame_data)
+                    print(str(start_bias_time), ',', self.frame_data['pid'], ',', hex(self.endpoint[0]), ',', hex(self.addr[0]), ',', text_str, ",",data_str)
+                new_frame = AnalyzerFrame(report_type, self.frame_start_time, self.frame_end_time, self.frame_data)
                 #self.frame_data = {'pid':'', 'pid2':''}
                 self.frame_data = {'pid':''}
+                self.processing_report_data = False
                 return new_frame
 
         return None
