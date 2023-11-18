@@ -64,6 +64,24 @@ class Hla(HighLevelAnalyzer):
         0XB: "DATC [DEPRECATED]"
     }
 
+    s_sdp_data_element_types = {
+        0x0: "(Nil)",
+        0x1: "(UINT)",
+        0x2: "(INT)",
+        0x3: "(UUID)",
+        0x4: "(STR)",
+        0x5: "(BOOL)",
+        0x6: "(SEQ)",
+        0x7: "(ALT)",
+        0x8: "(URL)"
+    }
+    s_psm_names = {
+        0x01: "(SDP)",
+        0x11: "(CTRL)",
+        0x13: "(INT)"
+    }
+
+
     #--------------------------------------------------------------------------
     # Class Init function 
     #--------------------------------------------------------------------------
@@ -89,8 +107,10 @@ class Hla(HighLevelAnalyzer):
         self.first_packet_start_time = None;
         #print("Settings:", self.my_string_setting,
         #      self.my_number_setting, self.my_choices_setting)
-        self.parse_data = None;
+        self.parse_data = None
         self.parse_level_bytes_left = arr.array('l')
+        self.parse_str = ""
+        self.map_CID_to_usage = {}
  
     # returns, token Type, Size (bytes used), and value
     def get_next_token(self, index, cb_left):
@@ -120,37 +140,60 @@ class Hla(HighLevelAnalyzer):
             # type = 2 signed
             elif (element == 0x10): # unsigned one byte
                 element_size = 2
-                element_value = int.from_bytes(self.parse_data[index:index],'big', signed=True)
+                element_value = int.from_bytes(self.parse_data[index:index+1],'big', signed=True)
             elif (element == 0x11): # unsigned 2  byte
                 element_size = 3
-                element_value = int.from_bytes(self.parse_data[index:index+1],'big', signed=True)
+                element_value = int.from_bytes(self.parse_data[index:index+2],'big', signed=True)
             elif (element == 0x12): # unsigned 4  byte
                 element_size = 5
-                element_value = int.from_bytes(self.parse_data[index:index+3],'big', signed=True)
+                element_value = int.from_bytes(self.parse_data[index:index+4],'big', signed=True)
             elif (element == 0x13): # unsigned 8  byte
                 element_size = 9
-                element_value = int.from_bytes(self.parse_data[index:index+7],'big', signed=True)
+                element_value = int.from_bytes(self.parse_data[index:index+8],'big', signed=True)
             # type = 3 uuid
             elif (element == 0x18): # unsigned one byte
                 element_size = 2
                 element_value = self.parse_data[index] 
             elif (element == 0x19): # unsigned 2  byte
                 element_size = 3
-                element_value = int.from_bytes(self.parse_data[index:index+1],'big', signed=False)
+                element_value = int.from_bytes(self.parse_data[index:index+2],'big', signed=False)
             elif (element == 0x1A): # unsigned 4  byte
                 element_size = 5
-                element_value = int.from_bytes(self.parse_data[index:index+3],'big', signed=False)
+                element_value = int.from_bytes(self.parse_data[index:index+4],'big', signed=False)
             # type = 4 String
             elif (element == 0x25):
                 str_size = self.parse_data[index];
                 index += 1
                 element_size = str_size + 2
-                element_value =  self.parse_data[index:index+str_size].decode('utf-8')
+                if (cb_left >= element_size):
+                    try:
+                        element_value = self.parse_data[index:index+str_size].decode('utf-8')
+                    except:
+                        element_value = "<str parse error>"
+                        count_out = 0
+                        for i in range(index, index+str_size):
+                            element_value += ' ' + hex(self.parse_data[i])
+                            count_out += 1
+                            if (count_out > 32):
+                                element_value += "..."
+                                break;
+
             elif (element == 0x26):
                 str_size = (self.parse_data[index] << 8) + self.parse_data[index + 1] ;
                 index += 2
                 element_size = str_size + 3
-                element_value = self.parse_data[index:index+str_size].decode('utf-8')
+                if (cb_left >= element_size):
+                    try:
+                        element_value = self.parse_data[index:index+str_size].decode('utf-8')
+                    except:
+                        element_value = "<str parse error>"
+                        count_out = 0
+                        for i in range(index, index+str_size):
+                            element_value += ' ' + hex(self.parse_data[i])
+                            count_out += 1
+                            if (count_out > 64):
+                                element_value += "..."
+                                break;
             # type = 5 Bool
             elif (element == 0x28): # unsigned one byte
                 element_size = 2
@@ -243,18 +286,44 @@ class Hla(HighLevelAnalyzer):
             if (element_type in [6,7]): 
                 self.parse_level_bytes_left.append(element_value) # new collection level
                 print("{ (", element_value, ")", end='')
+                if (element_type == 6):
+                    self.parse_str += " {C"
+                else:
+                    self.parse_str += " {A"
             else:
                 print(element_value, end='')
+                self.parse_str += " "
+                if  element_type in self.s_sdp_data_element_types:
+                    self.parse_str += self.s_sdp_data_element_types[element_type]
+                else:
+                    self.parse_str = '(0x' + hex(element_type ) + ')'
+
+                if (element_type == 4):
+                    self.parse_str += element_value
+                elif self.base == 10:
+                    self.parse_str += str(element_value)
+                else:
+                    self.parse_str += hex(element_value)
+
+
             # now see if any of the sequnce levels has completed
             i = len(self.parse_level_bytes_left) - 1
+            output_parse_str = False
             while (i >= 0):
                 if (self.parse_level_bytes_left[i] <= 0):
                     self.parse_level_bytes_left.pop() # remove that item
-                    print(" }", end="") 
+                    print(" }", end="")
+                    self.parse_str += " }"
+                    if (i <= 2):
+                        output_parse_str = True
                 i -= 1
             cb -= element_size
             index += element_size
             print('') #output end of line    
+            if output_parse_str:
+                print("===== ", self.parse_str)
+                self.parse_str = "" 
+        
         # see if we exited with cb > 0
         if (cb <= 0):
             self.parse_data = None
@@ -266,8 +335,106 @@ class Hla(HighLevelAnalyzer):
                 print(hex(self.parse_data[i]), end="")
             print("")
 
+    def cid_name_to_str(self, cid):
+        return_string = hex(cid)
+        if cid in self.map_CID_to_usage:
+            cid_map = self.map_CID_to_usage[cid]
+            return_string += "=" + cid_map["SORD"] + self.s_psm_names[cid_map["PSM"]]
+        return return_string
 
 
+    def parse_l2cap_commands(self, frame: AnalyzerFrame, cmd):
+        # get the command name:
+        if cmd in self.s_l2cap_commands:
+            text_str = self.s_l2cap_commands[cmd]
+
+            # then see if we want to add additional information
+            if cmd == 0x02: # "L2CMD_CONNECTION_REQUEST" (8)0x2 0x3 0x4 0x0 0x1 0x0 0x40 0x0
+                try:
+                    PSM = self.data_packet_save[12] + (self.data_packet_save[13] << 8)
+                    SCID = self.data_packet_save[14] + (self.data_packet_save[15] << 8)
+                    text_str += " PSM: 0x" + hex(PSM)
+                    if PSM in self.s_psm_names:
+                        text_str += self.s_psm_names[PSM]
+                        self.map_CID_to_usage.update({SCID:{"PSM":PSM, "SORD":"S"}} )
+
+                    text_str += " SCID:" + hex(SCID) 
+                except:
+                    text_str += " (except)"
+
+            elif cmd == 0x03: #"L2CMD_CONNECTION_RESPONSE" (8)0x3 0x3 0x8 0x0 0x42 0x0 0x40 0x0 0x0 0x0 0x0 0x0
+                #try:
+                DCID = self.data_packet_save[12] + (self.data_packet_save[13] << 8)
+                SCID = self.data_packet_save[14] + (self.data_packet_save[15] << 8)
+                scid_map = self.map_CID_to_usage[SCID]
+                if scid_map != None:
+                    self.map_CID_to_usage.update({DCID:{"PSM":scid_map["PSM"], "SORD":"D"}} )
+                result = self.data_packet_save[16] + (self.data_packet_save[17] << 8)
+                status = self.data_packet_save[18] + (self.data_packet_save[19] << 8)
+                text_str += " SCID: " + self.cid_name_to_str(SCID) + " DCID: " + hex(DCID) + " RES: " + hex(result) + "Status: " + hex(status)
+                #except:
+                #   text_str += " (except)"
+            elif cmd == 0x04: #"L2CMD_CONFIG_REQUEST" 0x4 0x4 0x4 0x0 0x42 0x0 0x0 0x0  
+                try:
+                    DCID = self.data_packet_save[12] + (self.data_packet_save[13] << 8)
+                    flags = self.data_packet_save[14] + (self.data_packet_save[15] << 8)
+                    text_str += " DCID: " + self.cid_name_to_str(DCID) + " flags: " + hex(flags)
+                except:
+                    text_str += " (except)"
+            elif cmd == 0x05: # "L2CMD_CONFIG_RESPONSE", 0x5 0x2 0xa 0x0 0x42 0x0 0x0 0x0 0x0 0x0 0x1 0x2 0x30 0x0
+                try:
+                    len = self.data_packet_save[10] + (self.data_packet_save[11] << 8)
+                    SCID = self.data_packet_save[12] + (self.data_packet_save[13] << 8)
+                    flags = self.data_packet_save[14] + (self.data_packet_save[15] << 8)
+                    result = self.data_packet_save[16] + (self.data_packet_save[17] << 8)
+                    text_str += " SCID: " + self.cid_name_to_str(SCID) + " flags: " + hex(flags) + " RES: " + hex (result)
+                    if len > 8:
+                        config = self.data_packet_save[18] + (self.data_packet_save[19] << 8)
+                        text_str += "Config: " + hex(config)
+                except:
+                    text_str += " (except)"
+
+            elif cmd == 0x06: # "L2CMD_DISCONNECT_REQUEST",    
+                DCID = self.data_packet_save[12] + (self.data_packet_save[13] << 8)
+                SCID = self.data_packet_save[14] + (self.data_packet_save[15] << 8)
+                text_str += " DCID: " + self.cid_name_to_str(DCID) + " SCID: " + self.cid_name_to_str(SCID)
+
+            elif cmd == 0x07: # "L2CMD_DISCONNECT_RESPONSE",   
+                DCID = self.data_packet_save[12] + (self.data_packet_save[13] << 8)
+                SCID = self.data_packet_save[14] + (self.data_packet_save[15] << 8)
+                text_str += " DCID: " + self.cid_name_to_str(DCID) + " SCID: " + self.cid_name_to_str(SCID)
+            
+            elif cmd == 0x0A:  # "L2CMD_INFORMATION_REQUEST"
+                info_type = self.data_packet_save[12] + (self.data_packet_save[13] << 8)
+                text_str += " IT: " + hex(info_type)
+                if (info_type == 1):
+                    text_str += "(Connectionless MTU)"
+                elif (info_type == 2):
+                    text_str += "(Extended fetures supported)"
+                elif (info_type == 3):
+                    text_str += "(Fixed channels supported)"
+
+            elif cmd == 0x0B:  # "L2CMD_INFORMATION_RESPONSE"
+                #   0x47 0x20 0x10 0x0 0xc 0x0 0x1 0x0 (8)0xb 0x1 0x8 0x0 0x2 0x0 0x0 0x0 0x80 0x2 0x0 0x0
+                len = self.data_packet_save[10] + (self.data_packet_save[11] << 8)
+                info_type = self.data_packet_save[12] + (self.data_packet_save[13] << 8)
+                result = self.data_packet_save[14] + (self.data_packet_save[15] << 8)
+                text_str += " IT: " + hex(info_type) + " result: " + hex(result)
+                if (len > 4):
+                    text_str += " data:"
+                    for i in range(4, len): 
+                        text_str += " " + hex(self.data_packet_save[12+i])
+
+
+        else:
+            try:
+                text_str = ''.join([ '0x', hex(cmd ).upper()[2:] ])
+                text_str = self.parse_l2cap_connect_request(frame)
+            except:
+                text_str += " (except)"
+                
+
+        return text_str
 
     def decode(self, frame: AnalyzerFrame):
         #if frame.type == 'frame':
@@ -447,11 +614,9 @@ class Hla(HighLevelAnalyzer):
                             if cmd == 7:
                                 self.decode_SDP_Attribute_results(frame, 13) 
                             #SDP s_sdp_commands
-                        else:    
-                            if  cmd in self.s_l2cap_commands:
-                                text_str = self.s_l2cap_commands[cmd]
-                            else:
-                                text_str = ''.join([ '0x', hex(cmd ).upper()[2:] ])
+                        else:  
+                            # process l2cap commands
+                            text_str = self.parse_l2cap_commands(frame, cmd)
                     else:
                         if  cmd_type in self.s_HIDP_msg_types:
                             text_str = self.s_HIDP_msg_types[cmd_type]
