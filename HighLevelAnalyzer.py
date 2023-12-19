@@ -24,7 +24,7 @@ class Hla(HighLevelAnalyzer):
 
     # An optional list of types this analyzer produces, providing a way to customize the way frames are displayed in Logic 2.
     result_types = {
-        'USB': {'format': '{{data.pid}}({{data.addr}},{{data.endpoint}}) {{data.data}}'},
+        'USB': {'format': '{{data.pid}}({{data.addr}},{{data.endpoint}},{{data.ack}}) {{data.data}}'},
         'USB Text': {'format': '{{data.pid}}({{data.addr}},{{data.endpoint}}) "{{data.text}}"'},
 
     }
@@ -101,6 +101,7 @@ class Hla(HighLevelAnalyzer):
         self.frame_end_time = None
         self.data_packet_save = None
         self.text_save = None
+        self.frame_ack_nak = None
         self.processing_report_data = False
         #self.frame_data = {'pid':'', 'pid2':''}
         self.frame_data = {'pid':''}
@@ -443,6 +444,7 @@ class Hla(HighLevelAnalyzer):
         if self.first_packet_start_time == None:
             self.first_packet_start_time = frame.start_time
         if frame.type == 'pid':
+            # test below ???
             if self.frame_data != None:
                 pid_type = frame.data['value']
                 if pid_type == "IN":
@@ -454,6 +456,12 @@ class Hla(HighLevelAnalyzer):
                 elif pid_type == "SETUP":
                     self.frame_data['pid'] = "SETUP" 
                     self.frame_start_time = frame.start_time
+                if self.data_packet_save != None:
+                    if pid_type == "ACK":
+                        self.frame_ack_nak = "ACK"
+                    elif pid_type == "NAK":
+                        self.frame_ack_nak = "NAK"
+
                 #elif pid_type == "DATA0":
                 #    self.frame_data['pid2'] = "DATA0" 
                 #elif pid_type == "DATA1":
@@ -542,7 +550,7 @@ class Hla(HighLevelAnalyzer):
             print(str(start_bias_time), ';HID Item;', hex(self.endpoint[0]), ';', hex(self.addr[0]), ';', frame.data['text'])
             self.frame_end_time = frame.end_time
         elif frame.type == 'eop':
-            if (self.data_packet_save) != None:
+            if (self.data_packet_save) != None and self.frame_ack_nak != None:
                 data_str = ''
                 text_str = ''
                 report_type = 'USB'
@@ -640,15 +648,17 @@ class Hla(HighLevelAnalyzer):
                 self.frame_data['data'] = data_str    
                 self.frame_data['endpoint'] = self.endpoint
                 self.frame_data['addr'] = self.addr
+                self.frame_data['ack'] = self.frame_ack_nak
                 self.data_packet_save = None
                 start_bias_time = float(self.frame_start_time - self.first_packet_start_time)
                 if self.base == 10:
-                    print(str(start_bias_time), ';', self.frame_data['pid'], ';', str(self.endpoint[0]), ';', str(self.addr[0]), ';', text_str, ";",data_str)
+                    print(str(start_bias_time), ';', self.frame_data['pid'], ';', str(self.endpoint[0]), ';', str(self.addr[0]), ";", self.frame_data['ack'], ';', text_str, ";",data_str)
                 else:
-                    print(str(start_bias_time), ';', self.frame_data['pid'], ';', hex(self.endpoint[0]), ';', hex(self.addr[0]), ';', text_str, ";",data_str)
+                    print(str(start_bias_time), ';', self.frame_data['pid'], ';', hex(self.endpoint[0]), ';', hex(self.addr[0]), ";", self.frame_data['ack'], ';', text_str, ";",data_str)
                 new_frame = AnalyzerFrame(report_type, self.frame_start_time, self.frame_end_time, self.frame_data)
                 #self.frame_data = {'pid':'', 'pid2':''}
                 self.frame_data = {'pid':''}
+                self.frame_ack_nak = None
                 self.processing_report_data = False
                 return new_frame
 
