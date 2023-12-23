@@ -597,8 +597,43 @@ class Hla(HighLevelAnalyzer):
                                 text_str += " FEATURE # " + str(self.data_packet_save[2]) 
                             else:
                                 text_str += '?? '
+                    elif bmRequestType == 0xa3 and bmRequest == 0:
+                        text_str = "[HUB Get Port:" + hex(wIndex) + " status"
+                    elif bmRequestType == 0x23:
+                        if bmRequest == 1:
+                            text_str = "[HUB Clear port:" + hex(wIndex) + " Feature:"
+                        elif bmRequest == 3:
+                            text_str = "[HUB Set port:" + hex(wIndex) + " Feature:"
+                        if wValue ==  0:
+                            text_str += " CONNECTION"
+                        if wValue ==  1:
+                            text_str += " ENABLE"
+                        if wValue ==  2:
+                            text_str += " SUSPEND"
+                        if wValue ==  3:
+                            text_str += " OVER_CURRENT"
+                        if wValue ==  4:
+                            text_str += " RESET"
+                        if wValue ==  8:
+                            text_str += " POWER"
+                        if wValue ==  9:
+                            text_str += " LOW_SPEED"
+                        if wValue ==  16:
+                            text_str += " C_CONNECTION"
+                        if wValue ==  17:
+                            text_str += " C_ENABLE"
+                        if wValue ==  18:
+                            text_str += " C_SUSPEND"
+                        if wValue ==  19:
+                            text_str += " C_OVER_CURRENT"
+                        if wValue ==  20:
+                            text_str += " C_RESET"
+                        if wValue ==  21:
+                            text_str += " TEST"
+                        if wValue ==  22:
+                            text_str += " INDICATOR"
                     else:
-                        text_str = "[RT:" + hex(bmRequestType) + " R:" + hex(bmRequest) 
+                        text_str = "[RT:" + hex(bmRequestType) + " R:" + hex(bmRequest) + ' V:' + hex(wValue)
 
                     text_str +=' I:' + hex(wIndex) + " L:" + hex(wLength)  + "]"
 
